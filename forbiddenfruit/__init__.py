@@ -54,13 +54,19 @@ except ImportError:
     # Python 3 support
     import builtins as __builtin__
 
+is_pypy = False
+try:
+    import __pypy__
+
+    is_pypy = True
+except:
+    pass
+
 __version__ = '0.1.3'
 
 __all__ = 'curse', 'curses', 'reverse'
 
-
 Py_ssize_t = ctypes.c_int64 if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_int32
-
 
 # dictionary holding references to the allocated function resolution
 # arrays to type objects
@@ -76,8 +82,10 @@ class PyObject(ctypes.Structure):
     def decref(self):
         self.ob_refcnt -= 1
 
+
 class PyFile(ctypes.Structure):
     pass
+
 
 PyObject_p = ctypes.py_object
 Inquiry_p = ctypes.CFUNCTYPE(ctypes.c_int, PyObject_p)
@@ -93,14 +101,32 @@ ObjObjProc_p = ctypes.CFUNCTYPE(ctypes.c_int, PyObject_p, PyObject_p)
 
 FILE_p = ctypes.POINTER(PyFile)
 
+_apimap = {}
+if is_pypy:
+    _apimap = {
+        "_Py_NotImplementedStruct": ctypes.pythonapi._PyPy_NotImplementedStruct,
+        "PyDict_SetItem": ctypes.pythonapi.PyPyDict_SetItem,
+        "PyType_Modified": ctypes.pythonapi.PyPyType_Modified
+    }
+else:
+    _apimap = {
+        "_Py_NotImplementedStruct": ctypes.pythonapi._Py_NotImplementedStruct,
+        "PyDict_SetItem": ctypes.pythonapi.PyDict_SetItem,
+        "PyType_Modified": ctypes.pythonapi.PyType_Modified
+    }
+
+
+def pythonapi(m):
+    return _apimap[m]
+
 
 def get_not_implemented():
     namespace = {}
     name = "_Py_NotImplmented"
     not_implemented = ctypes.cast(
-        ctypes.pythonapi._Py_NotImplementedStruct, ctypes.py_object)
+        pythonapi('_Py_NotImplementedStruct'), ctypes.py_object)
 
-    ctypes.pythonapi.PyDict_SetItem(
+    pythonapi('PyDict_SetItem')(
         ctypes.py_object(namespace),
         ctypes.py_object(name),
         not_implemented
@@ -111,49 +137,51 @@ def get_not_implemented():
 # address of the _Py_NotImplementedStruct singleton
 NotImplementedRet = get_not_implemented()
 
+
 class PyNumberMethods(ctypes.Structure):
     _fields_ = [
-    ('nb_add', BinaryFunc_p),
-    ('nb_subtract', BinaryFunc_p),
-    ('nb_multiply', BinaryFunc_p),
-    ('nb_remainder', BinaryFunc_p),
-    ('nb_divmod', BinaryFunc_p),
-    ('nb_power', BinaryFunc_p),
-    ('nb_negative', UnaryFunc_p),
-    ('nb_positive', UnaryFunc_p),
-    ('nb_absolute', UnaryFunc_p),
-    ('nb_bool', Inquiry_p),
-    ('nb_invert', UnaryFunc_p),
-    ('nb_lshift', BinaryFunc_p),
-    ('nb_rshift', BinaryFunc_p),
-    ('nb_and', BinaryFunc_p),
-    ('nb_xor', BinaryFunc_p),
-    ('nb_or', BinaryFunc_p),
-    ('nb_int', UnaryFunc_p),
-    ('nb_reserved', ctypes.c_void_p),
-    ('nb_float', UnaryFunc_p),
+        ('nb_add', BinaryFunc_p),
+        ('nb_subtract', BinaryFunc_p),
+        ('nb_multiply', BinaryFunc_p),
+        ('nb_remainder', BinaryFunc_p),
+        ('nb_divmod', BinaryFunc_p),
+        ('nb_power', BinaryFunc_p),
+        ('nb_negative', UnaryFunc_p),
+        ('nb_positive', UnaryFunc_p),
+        ('nb_absolute', UnaryFunc_p),
+        ('nb_bool', Inquiry_p),
+        ('nb_invert', UnaryFunc_p),
+        ('nb_lshift', BinaryFunc_p),
+        ('nb_rshift', BinaryFunc_p),
+        ('nb_and', BinaryFunc_p),
+        ('nb_xor', BinaryFunc_p),
+        ('nb_or', BinaryFunc_p),
+        ('nb_int', UnaryFunc_p),
+        ('nb_reserved', ctypes.c_void_p),
+        ('nb_float', UnaryFunc_p),
 
-    ('nb_inplace_add', BinaryFunc_p),
-    ('nb_inplace_subtract', BinaryFunc_p),
-    ('nb_inplace_multiply', BinaryFunc_p),
-    ('nb_inplace_remainder', BinaryFunc_p),
-    ('nb_inplace_power', TernaryFunc_p),
-    ('nb_inplace_lshift', BinaryFunc_p),
-    ('nb_inplace_rshift', BinaryFunc_p),
-    ('nb_inplace_and', BinaryFunc_p),
-    ('nb_inplace_xor', BinaryFunc_p),
-    ('nb_inplace_or', BinaryFunc_p),
+        ('nb_inplace_add', BinaryFunc_p),
+        ('nb_inplace_subtract', BinaryFunc_p),
+        ('nb_inplace_multiply', BinaryFunc_p),
+        ('nb_inplace_remainder', BinaryFunc_p),
+        ('nb_inplace_power', TernaryFunc_p),
+        ('nb_inplace_lshift', BinaryFunc_p),
+        ('nb_inplace_rshift', BinaryFunc_p),
+        ('nb_inplace_and', BinaryFunc_p),
+        ('nb_inplace_xor', BinaryFunc_p),
+        ('nb_inplace_or', BinaryFunc_p),
 
-    ('nb_floor_divide', BinaryFunc_p),
-    ('nb_true_divide', BinaryFunc_p),
-    ('nb_inplace_floor_divide', BinaryFunc_p),
-    ('nb_inplace_true_divide', BinaryFunc_p),
+        ('nb_floor_divide', BinaryFunc_p),
+        ('nb_true_divide', BinaryFunc_p),
+        ('nb_inplace_floor_divide', BinaryFunc_p),
+        ('nb_inplace_true_divide', BinaryFunc_p),
 
-    ('nb_index', BinaryFunc_p),
+        ('nb_index', BinaryFunc_p),
 
-    ('nb_matrix_multiply', BinaryFunc_p),
-    ('nb_inplace_matrix_multiply', BinaryFunc_p),
+        ('nb_matrix_multiply', BinaryFunc_p),
+        ('nb_inplace_matrix_multiply', BinaryFunc_p),
     ]
+
 
 class PySequenceMethods(ctypes.Structure):
     _fields_ = [
@@ -169,11 +197,14 @@ class PySequenceMethods(ctypes.Structure):
         ('sq_inplace_repeat', SSizeArgFunc_p),
     ]
 
+
 class PyMappingMethods(ctypes.Structure):
     pass
 
+
 class PyTypeObject(ctypes.Structure):
     pass
+
 
 class PyAsyncMethods(ctypes.Structure):
     pass
@@ -207,7 +238,6 @@ PyTypeObject._fields_ = [
     # ...
 ]
 
-
 # redundant dict of pointee types, because ctypes doesn't allow us
 # to extract the pointee type from the pointer
 PyTypeObject_as_types_dict = {
@@ -231,7 +261,7 @@ def patchable_builtin(klass):
 
     # This code casts `proxy_dict.dict` into a python object and
     # `from_address()` returns `py_object`
-    ctypes.pythonapi.PyDict_SetItem(
+    pythonapi('PyDict_SetItem')(
         ctypes.py_object(namespace),
         ctypes.py_object(name),
         proxy_dict.dict,
@@ -248,6 +278,7 @@ def __filtered_dir__(obj=None):
         calling_frame = inspect.currentframe().f_back
         return sorted(calling_frame.f_locals.keys())
     return sorted(set(__dir__(obj)).difference(__hidden_elements__[name]))
+
 
 # Switching to the custom dir impl declared above
 __hidden_elements__ = defaultdict(list)
@@ -356,7 +387,7 @@ def _curse_special(klass, attr, func):
             tp_as_obj = struct_ty()
             tp_as_dict[(klass, attr)] = tp_as_obj
             tp_as_new_ptr = ctypes.cast(ctypes.addressof(tp_as_obj),
-                ctypes.POINTER(struct_ty))
+                                        ctypes.POINTER(struct_ty))
 
             setattr(tyobj, tp_as_name, tp_as_new_ptr)
         tp_as = tp_as_ptr[0]
@@ -384,6 +415,7 @@ def _curse_special(klass, attr, func):
         tp_func_dict[(klass, attr)] = cfunc
         setattr(tyobj, impl_method, cfunc)
 
+
 def _revert_special(klass, attr):
     tp_as_name, impl_method = override_dict[attr]
     tyobj = PyTypeObject.from_address(id(klass))
@@ -398,7 +430,7 @@ def _revert_special(klass, attr):
                     cfunc_t = ftype
 
             setattr(tp_as, impl_method,
-                ctypes.cast(ctypes.c_void_p(None), cfunc_t))
+                    ctypes.cast(ctypes.c_void_p(None), cfunc_t))
         else:
             if not (klass, attr) in tp_as_dict:
                 # we didn't save this pointer
@@ -442,13 +474,13 @@ def curse(klass, attr, value, hide_from_dir=False):
     dikt = patchable_builtin(klass)
 
     old_value = dikt.get(attr, None)
-    old_name = '_c_%s' % attr   # do not use .format here, it breaks py2.{5,6}
+    old_name = '_c_%s' % attr  # do not use .format here, it breaks py2.{5,6}
 
     # Patch the thing
     dikt[attr] = value
 
     if old_value:
-        hide_from_dir = False   # It was already in dir
+        hide_from_dir = False  # It was already in dir
         dikt[old_name] = old_value
 
         try:
@@ -460,7 +492,7 @@ def curse(klass, attr, value, hide_from_dir=False):
         except AttributeError:
             pass
 
-    ctypes.pythonapi.PyType_Modified(ctypes.py_object(klass))
+    pythonapi('PyType_Modified')(ctypes.py_object(klass))
 
     if hide_from_dir:
         __hidden_elements__[klass.__name__].append(attr)
@@ -495,7 +527,7 @@ def reverse(klass, attr):
     dikt = patchable_builtin(klass)
     del dikt[attr]
 
-    ctypes.pythonapi.PyType_Modified(ctypes.py_object(klass))
+    pythonapi('PyType_Modified')(ctypes.py_object(klass))
 
 
 def curses(klass, name):
@@ -511,9 +543,11 @@ def curses(klass, name):
         >>> {'a': 1, 'b': 2}.banner()
         'This dict has 2 elements'
     """
+
     def wrapper(func):
         curse(klass, name, func)
         return func
+
     return wrapper
 
 
